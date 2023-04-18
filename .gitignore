@@ -1,0 +1,7 @@
+# 忽略编译生成的文件和文件夹
+__pycache__/
+.idea/
+.workflow/
+
+autocalculate_all_fisheye.py
+calculate_fisheye.py
