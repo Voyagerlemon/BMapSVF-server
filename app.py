@@ -7,6 +7,8 @@ FilePath: app.py
 Description: BMapSVF API
 """
 import os
+import socket
+
 import cv2
 import requests
 import json
@@ -53,7 +55,15 @@ def favicon():
     return send_from_directory(os.path.join(app.root_path, 'static'),
                                'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
-
+# 定义错误处理函数
+# @app.errorhandler(Exception)
+# def handle_error(e):
+#     error_message = str(e)
+#     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#         s.connect(("127.0.0.1", 5000))
+#         s.sendall(error_message.encode("utf-8"))
+#     # 返回错误响应
+#     return jsonify({"error": error_message})
 
 @app.route('/')
 def index():
@@ -83,7 +93,7 @@ def error_handler_chat(e):
     print('An error has occurred: ' + str(e))
 
 # -----------------------------------------#
-# 使用Websocket登录接口
+# Websocket登录接口
 # -----------------------------------------#
 @socketio.on("login")
 def login(get_data):
@@ -114,66 +124,222 @@ def mysql(host='127.0.0.1', user='root', password='gis5566&', port=3306, db='pan
         cursor.close()
         conn.close()
 
+# -----------------------------------------------POST---------------------------------------------------------#
+
 # -----------------------------------------#
 # Websocket处理百度全景图接口
 # -----------------------------------------#
 @socketio.on("postSavePanorama")
 def save_panorama(get_data):
-    time_start = time.time()
-    total_cost = 0
-    table = "bmapsvf_test"
-    srcPath = get_data.get("srcPath")
-    panoid = get_data.get("panoid")
-    date = get_data.get("date")
-    lng = get_data.get("lng")
-    lat = get_data.get("lat")
-    descr = get_data.get("description").encode('utf-8').decode('utf-8')
-    result = urllib.request.urlopen(srcPath)
-    panorama = result.read()
+    try:
+        time_start = time.time()
+        total_cost = 0
+        table = "bmapsvf_test"
+        srcPath = get_data.get("srcPath")
+        panoid = get_data.get("panoid")
+        date = get_data.get("date")
+        lng = get_data.get("lng")
+        lat = get_data.get("lat")
+        descr = get_data.get("description").encode('utf-8').decode('utf-8')
+        result = urllib.request.urlopen(srcPath)
+        panorama = result.read()
 
-    # 将二进制数据转换为图像对象
-    img_panorama = Image.open(BytesIO(panorama))
-    img_panorama.save(cur_path + "/img_panorama/panorama_00/once.png", "PNG")
-    img_fisheye = equire2fisheye(cur_path + "/img_panorama/panorama_00/once.png", 0)
+        # 将二进制数据转换为图像对象
+        img_panorama = Image.open(BytesIO(panorama))
+        img_panorama.save(cur_path + "/img_panorama/panorama_00/once.png", "PNG")
+        img_fisheye = equire2fisheye(cur_path + "/img_panorama/panorama_00/once.png", 0)
 
-    output_panorama = BytesIO()
-    img_fisheye[0].save(output_panorama, format='PNG')
-    fisheye = output_panorama.getvalue()
+        output_panorama = BytesIO()
+        img_fisheye[0].save(output_panorama, format='PNG')
+        fisheye = output_panorama.getvalue()
 
-    print('-----开始进行语义分割-----')
-    socketio.emit("getReadSegInfo", {"msg": "Semantic segmentation is underway!"}, broadcast=True)
-    seg_result = real_time_segmentation(cur_path)
-    total_cost = seg_result[0]
-    print("total time:", f"{total_cost}" + "s")
-    socketio.emit("getReadPanorama", {"msg": f"Semantic segmentation is complete, and takes {total_cost:.2f} s. Calculating SVF!",
-                                   "total_cost": total_cost}, broadcast=True)
+        print('-----开始进行语义分割-----')
+        socketio.emit("getReadSegInfo", {"msg": "Semantic segmentation is underway!"}, broadcast=True)
+        seg_result = real_time_segmentation(cur_path)
+        total_cost = seg_result[0]
+        print("total time:", f"{total_cost}" + "s")
+        socketio.emit("getReadPanorama",
+                      {"msg": f"Semantic segmentation is complete, and takes {total_cost:.2f} s. Calculating SVF!",
+                       "total_cost": total_cost}, broadcast=True)
 
-    img = cv2.imread(seg_result[1], 1)
-    retval, buffer = cv2.imencode('.png', img)
-    panorama_seg = np.array(buffer).tobytes()
+        img = cv2.imread(seg_result[1], 1)
+        retval, buffer = cv2.imencode('.png', img)
+        panorama_seg = np.array(buffer).tobytes()
 
-    print('-----开始计算svf-----')
-    img_seg_fisheye = equire2fisheye(seg_result[2], 1)
-    output_seg_fisheye = BytesIO()
-    img_seg_fisheye[0].save(output_seg_fisheye, format='PNG')
-    fisheye_seg = output_seg_fisheye.getvalue()
-    svf = img_seg_fisheye[1]
+        print('-----开始计算svf-----')
+        img_seg_fisheye = equire2fisheye(seg_result[2], 1)
+        output_seg_fisheye = BytesIO()
+        img_seg_fisheye[0].save(output_seg_fisheye, format='PNG')
+        fisheye_seg = output_seg_fisheye.getvalue()
+        svf = img_seg_fisheye[1]
 
-    socketio.emit("getCalculateSVF", {"msg": "SVF calculation is complete!", "svf": svf}, broadcast=True)
+        socketio.emit("getCalculateSVF", {"msg": "SVF calculation is complete!", "svf": svf}, broadcast=True)
 
-    with mysql() as cursor:
-        cursor.execute(
-            "INSERT INTO {}(panoid, date, lng, lat, description, panorama, fisheye, panorama_seg, fisheye_seg, svf) "
-            "VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)".format(
-                table),
-            (panoid, date, lng, lat, descr, panorama, fisheye, panorama_seg, fisheye_seg, svf))
-        print('-----百度全景图及相关信息成功存入至数据库-----')
+        with mysql() as cursor:
+            cursor.execute(
+                "INSERT INTO {}(panoid, date, lng, lat, description, panorama, fisheye, panorama_seg, fisheye_seg, svf) "
+                "VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)".format(
+                    table),
+                (panoid, date, lng, lat, descr, panorama, fisheye, panorama_seg, fisheye_seg, svf))
+            print('-----百度全景图及相关信息成功存入至数据库-----')
+    except Exception as e:
+        socketio.emit("postSaveError", str(e))
     socketio.emit("getSuccessPanorama", {"msg": "Data storage successfully!"}, broadcast=True)
+
+# -----------------------------------------#
+# Http发送csv文件
+# -----------------------------------------#
+@app.route('/upload', methods=['POST'], strict_slashes=False)
+def upload():
+    try:
+        table = "bmapsvf_transform"
+        time_stamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        file_csv = request.files['file']
+        file_csv.save(cur_path + f"/csv/file_{time_stamp}.csv")
+        print('-----csv文件上传成功-----')
+        csv_results = []
+        # 服务地址
+        host = "https://api.map.baidu.com"
+        uri = "/geoconv/v1/"
+        # BrlC46ogjvmEkblNNsauxtjmgKjHBiqN
+        # uYPVx8FpGoILUNAkM9WGCvFb1t5tQAuH
+        # h5GlIkW5aT6ZVyESoOtaz5C8KCPpcCLE
+        # YniOI8mkAeMNRPNR4DkFu5LQP9ArmWGn
+        # YeOWIMkFXGT8k6LIYi6l5eGYEYpnS9gr
+        # qvIqQKAADKsPFqmxR6T0xP6EtKFT6TjQ
+        # 5NLRP7yso7RyZWiSkERyl8ZmPVrOEDRH
+        # 2rP0A4BSKwhFnWnQAvswGIUISoIHRtTU
+        ak = "BrlC46ogjvmEkblNNsauxtjmgKjHBiqN"
+        with open(cur_path + f"/csv/file_{time_stamp}.csv", encoding='utf-8', newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+            total = 0
+            for row in reader:
+                total += 1
+                wgs84_lng = float(row["lng"])
+                wgs84_lat = float(row["lat"])
+                params_location = {
+                    "coords": row["lng"] + ',' + row["lat"],
+                    "from": "1",
+                    "to": "5",
+                    "ak": ak,
+                }
+                response = requests.get(url=host + uri, params=params_location)
+                if response:
+                    result_json = response.json()
+                    result_arr = result_json["result"]
+                    for result in result_arr:
+                        bd09_lng = result['x']
+                        bd09_lat = result['y']
+                        with mysql() as cursor:
+                            cursor.execute(
+                                "INSERT INTO {}(bd09_lng, bd09_lat, wgs84_lng, wgs84_lat) "
+                                "VALUES(%s, %s, %s, %s)".format(
+                                    table),
+                                (bd09_lng, bd09_lat, wgs84_lng, wgs84_lat))
+                        row_result = {"lng": bd09_lng, "lat": bd09_lat}
+                        csv_results.append(row_result)
+    except Exception as e:
+        socketio.emit("postUploadError", str(e))
+    return jsonify({"status": 200, "msg": f"Csv file uploaded successfully, a total of {total} point(s) were loaded!", "csvResults": csv_results})
+
+# -----------------------------------------#
+# Websocket处理通过csv获取的百度全景接口
+# -----------------------------------------#
+@socketio.on("postCsvPanoramas")
+def csv_panorama(get_data):
+    table = "bmapsvf_study"
+    try:
+        for item in get_data:
+            srcPath = item["srcPath"]
+            panoid = item["panoid"]
+            date = item["date"]
+            lng = item["lng"]
+            lat = item["lat"]
+            descr = item["description"].encode('utf-8').decode('utf-8')
+            result = urllib.request.urlopen(srcPath)
+            panorama = result.read()
+            # 将二进制数据转换为图像对象
+            img_panorama = Image.open(BytesIO(panorama))
+            img_panorama.save(cur_path + "/img_panorama/panorama_00/once.png", "PNG")
+            img_fisheye = equire2fisheye(cur_path + "/img_panorama/panorama_00/once.png", 0)
+
+            output_panorama = BytesIO()
+            img_fisheye[0].save(output_panorama, format='PNG')
+            fisheye = output_panorama.getvalue()
+
+            print('-----开始进行语义分割-----')
+            socketio.emit("getReadSegInfo", {"msg": f"{panoid} point is currently undergoing semantic segmentation!"},
+                          broadcast=True)
+            seg_result = real_time_segmentation(cur_path)
+            total_cost = seg_result[0]
+            print("total time:", f"{total_cost}" + "s")
+            socketio.emit("getReadPanorama",
+                          {
+                              "msg": f"Semantic segmentation of {panoid} point has been complete and it took {total_cost:.2f}s. Calculating the SVF!",
+                              "total_cost": total_cost}, broadcast=True)
+
+            img = cv2.imread(seg_result[1], 1)
+            retval, buffer = cv2.imencode('.png', img)
+            panorama_seg = np.array(buffer).tobytes()
+
+            print('-----开始计算svf-----')
+            img_seg_fisheye = equire2fisheye(seg_result[2], 1)
+            output_seg_fisheye = BytesIO()
+            img_seg_fisheye[0].save(output_seg_fisheye, format='PNG')
+            fisheye_seg = output_seg_fisheye.getvalue()
+            svf = img_seg_fisheye[1]
+
+            socketio.emit("getCalculateSVF",
+                          {"msg": f"The SVF calculation of {panoid} point has been completed!", "svf": svf},
+                          broadcast=True)
+
+            with mysql() as cursor:
+                cursor.execute(
+                    "INSERT INTO {}(panoid, date, lng, lat, description, panorama, fisheye, panorama_seg, fisheye_seg, svf) "
+                    "VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)".format(
+                        table),
+                    (panoid, date, lng, lat, descr, panorama, fisheye, panorama_seg, fisheye_seg, svf))
+                print('-----百度全景图及相关信息成功存入至数据库-----')
+    except Exception as e:
+        socketio.emit("postCsvError", str(e))
+    socketio.emit("getSuccessPanorama", {"msg": "All data has been stored successfully!"}, broadcast=True)
+
+# -----------------------------------------#
+# Websocket的WGS84-->BD09坐标
+# -----------------------------------------#
+@socketio.on("postTransformWGSCoordinate")
+def transform_wgs_coordinate(get_data):
+    try:
+        lng = get_data['lng']
+        lat = get_data['lat']
+        host = "https://api.map.baidu.com"
+        uri = "/geoconv/v1/"
+        ak = "BrlC46ogjvmEkblNNsauxtjmgKjHBiqN"
+
+        params_location = {
+            "coords": lng + ',' + lat,
+            "from": "1",
+            "to": "5",
+            "ak": ak,
+        }
+        response = requests.get(url=host + uri, params=params_location)
+        if response:
+            result_json = response.json()
+            result_arr = result_json["result"]
+            for result in result_arr:
+                bd09_lng = result['x']
+                bd09_lat = result['y']
+                row_result = {"lng": bd09_lng, "lat": bd09_lat}
+    except Exception as e:
+        socketio.emit("postLocationError", str(e))
+    socketio.emit("getBD09Coordinate", {"row_result":  row_result}, broadcast=True)
+
+# -----------------------------------------------GET-----------------------------------------------------------#
 
 # -----------------------------------------#
 # Websocket获取百度全景处理结果接口
 # -----------------------------------------#
-@socketio.on("postPanoramaResults")
+@socketio.on("getPanoramaResults")
 def read_panorama(get_data):
     resquest_info = get_data.encode('utf-8').decode('utf-8')
     print(resquest_info)
@@ -193,115 +359,17 @@ def read_panorama(get_data):
         svf = row[5]
         row_result = {"panoid": panoid, "lng": lng, "lat": lat, "fisheye": fisheye, "fisheye_seg": fisheye_seg, "svf": svf}
         panorama_results.append(row_result)
-    socketio.emit("getPanoramaResults", {"panoramaResults": panorama_results}, broadcast=True)
-
-# -----------------------------------------#
-# Http发送csv文件
-# -----------------------------------------#
-@app.route('/upload', methods=['POST'], strict_slashes=False)
-def upload():
-    table = "bmapsvf_transform"
-    time_stamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-    file_csv = request.files['file']
-    file_csv.save(cur_path+ f"/csv/file_{time_stamp}.csv")
-    print('-----csv文件上传成功-----')
-    csv_results = []
-    # 服务地址
-    host = "https://api.map.baidu.com"
-    uri = "/geoconv/v1/"
-    ak = "YniOI8mkAeMNRPNR4DkFu5LQP9ArmWGn"
-    with open(cur_path+ f"/csv/file_{time_stamp}.csv", encoding='utf-8',newline='') as csvfile:
-      reader = csv.DictReader(csvfile)
-      for row in reader:
-          wgs84_lng = float(row["lng"])
-          wgs84_lat = float(row["lat"])
-          params_location = {
-              "coords": row["lng"]+','+row["lat"],
-              "from": "1",
-              "to": "5",
-              "ak": ak,
-          }
-          response = requests.get(url=host+uri, params= params_location)
-          if response:
-              result_json = response.json()
-              result_arr = result_json["result"]
-              for result in result_arr:
-                  bd09_lng = result['x']
-                  bd09_lat = result['y']
-                  with mysql() as cursor:
-                      cursor.execute(
-                          "INSERT INTO {}(bd09_lng, bd09_lat, wgs84_lng, wgs84_lat) "
-                          "VALUES(%s, %s, %s, %s)".format(
-                              table),
-                          (bd09_lng, bd09_lat, wgs84_lng, wgs84_lat))
-                  row_result = {"lng": bd09_lng, "lat":  bd09_lat}
-                  csv_results.append(row_result)
-    return jsonify({"status": 200, "msg": "Csv file uploaded successfully!", "csvResults": csv_results})
-
-# -----------------------------------------#
-# Websocket处理通过csv获取的百度全景接口
-# -----------------------------------------#
-@socketio.on("postCsvPanoramas")
-def csv_panorama(get_data):
-    table = "bmapsvf_csv"
-    for item in get_data:
-        srcPath = item["srcPath"]
-        panoid = item["panoid"]
-        date = item["date"]
-        lng = item["lng"]
-        lat = item["lat"]
-        descr = item["description"].encode('utf-8').decode('utf-8')
-        result = urllib.request.urlopen(srcPath)
-        panorama = result.read()
-        # 将二进制数据转换为图像对象
-        img_panorama = Image.open(BytesIO(panorama))
-        img_panorama.save(cur_path + "/img_panorama/panorama_00/once.png", "PNG")
-        img_fisheye = equire2fisheye(cur_path + "/img_panorama/panorama_00/once.png", 0)
-
-        output_panorama = BytesIO()
-        img_fisheye[0].save(output_panorama, format='PNG')
-        fisheye = output_panorama.getvalue()
-
-        print('-----开始进行语义分割-----')
-        socketio.emit("getReadSegInfo", {"msg": f"{panoid} point is currently undergoing semantic segmentation!"}, broadcast=True)
-        seg_result = real_time_segmentation(cur_path)
-        total_cost = seg_result[0]
-        print("total time:", f"{total_cost}" + "s")
-        socketio.emit("getReadPanorama",
-                      {"msg": f"Semantic segmentation of {panoid} point has been complete and it took {total_cost:.2f}s. Calculating the SVF!",
-                       "total_cost": total_cost}, broadcast=True)
-
-        img = cv2.imread(seg_result[1], 1)
-        retval, buffer = cv2.imencode('.png', img)
-        panorama_seg = np.array(buffer).tobytes()
-
-        print('-----开始计算svf-----')
-        img_seg_fisheye = equire2fisheye(seg_result[2], 1)
-        output_seg_fisheye = BytesIO()
-        img_seg_fisheye[0].save(output_seg_fisheye, format='PNG')
-        fisheye_seg = output_seg_fisheye.getvalue()
-        svf = img_seg_fisheye[1]
-
-        socketio.emit("getCalculateSVF", {"msg": f"The SVF calculation of {panoid} point has been completed!", "svf": svf}, broadcast=True)
-
-        with mysql() as cursor:
-            cursor.execute(
-                "INSERT INTO {}(panoid, date, lng, lat, description, panorama, fisheye, panorama_seg, fisheye_seg, svf) "
-                "VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)".format(
-                    table),
-                (panoid, date, lng, lat, descr, panorama, fisheye, panorama_seg, fisheye_seg, svf))
-            print('-----百度全景图及相关信息成功存入至数据库-----')
-    socketio.emit("getSuccessPanorama", {"msg": "All data has been stored successfully!"}, broadcast=True)
+    socketio.emit("postPanoramaResults", {"panoramaResults": panorama_results}, broadcast=True)
 
 # -----------------------------------------#
 # Websocket获取百度全景处理结果接口
 # -----------------------------------------#
-@socketio.on("postCsvPanoramaResults")
+@socketio.on("getCsvPanoramaResults")
 def read_csv_panorama(get_data):
     resquest_info = get_data.encode('utf-8').decode('utf-8')
     print(resquest_info)
     with mysql() as cursor:
-        cursor.execute("SELECT panoid, lng, lat, fisheye, fisheye_seg, svf FROM bmapsvf_csv")
+        cursor.execute("SELECT panoid, lng, lat, fisheye, fisheye_seg, svf FROM bmapsvf_qinhuai WHERE id <=228")
         result = cursor.fetchall()
 
     panorama_results = []
@@ -316,34 +384,145 @@ def read_csv_panorama(get_data):
         svf = row[5]
         row_result = {"panoid": panoid, "lng": lng, "lat": lat, "fisheye": fisheye, "fisheye_seg": fisheye_seg, "svf": svf}
         panorama_results.append(row_result)
-    socketio.emit("getCsvPanoramaResults", {"panoramaResults": panorama_results}, broadcast=True)
+    socketio.emit("postCsvPanoramaResults", {"panoramaResults": panorama_results}, broadcast=True)
 
 # -----------------------------------------#
-# Websocket的WGS84-->BD09坐标
+# Websocket获取全部数据进行保存
 # -----------------------------------------#
-@socketio.on("transformWGSCoordinate")
-def transform_wgs_coordinate(get_data):
-    lng = get_data['lng']
-    lat = get_data['lat']
-    host = "https://api.map.baidu.com"
-    uri = "/geoconv/v1/"
-    ak = "BrlC46ogjvmEkblNNsauxtjmgKjHBiqN"
+@socketio.on("getAllPanoramaResults")
+def read_all_panorama(get_data):
+    print(get_data)
+    table_name = 'bmapsvf_qinhuai'
+    save_path = r"E:\Master\Papers\SkyViewFactor\SCI\data\BMapQinhuai"
+    with mysql() as cursor:
+        cursor.execute("DESC %s" % table_name)
+        field_names = [row[0] for row in cursor.fetchall()]
+        field_names.remove("panorama")
+        field_names.remove("panorama_seg")
+        field_names.remove("fisheye")
+        field_names.remove("fisheye_seg")
 
-    params_location = {
-        "coords": lng + ',' + lat,
-        "from": "1",
-        "to": "5",
-        "ak": ak,
-    }
-    response = requests.get(url=host + uri, params=params_location)
-    if response:
-        result_json = response.json()
-        result_arr = result_json["result"]
-        for result in result_arr:
-            bd09_lng = result['x']
-            bd09_lat = result['y']
-            row_result = {"lng": bd09_lng, "lat": bd09_lat}
-    socketio.emit("getBD09Coordinate", {"row_result":  row_result}, broadcast=True)
+    with mysql() as cursor:
+        cursor.execute("SELECT id, panoid, date, lng, lat, description, svf FROM %s" % table_name)
+        result = cursor.fetchall()
+
+    file_name = "%s.csv" % table_name
+    file_path = os.path.join(save_path, file_name)
+    # 写入数据
+    with open(file_path, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(field_names)
+        for row in result:
+            writer.writerow(row)
+
+    with mysql() as cursor:
+        cursor.execute("SELECT id, lng, lat, fisheye, fisheye_seg, panorama FROM %s" % table_name)
+        result = cursor.fetchall()
+
+    panorama_results = []
+    for row in result:
+        pan_id = str(row[0])
+        pan_lng = str(row[1])
+        pan_lat = str(row[2])
+        pan_fisheye = row[3]
+        pan_fisheye_seg = row[4]
+        pan_picture = row[5]
+
+        save_fisheye = r"E:\Master\Papers\SkyViewFactor\SCI\data\BMapQinhuai\fisheye/"
+        if not os.path.exists(save_fisheye):
+            os.makedirs(save_fisheye)
+        save_fisheye_name = save_fisheye + pan_id + "_" + pan_lng + "_" + pan_lat + ".png"
+        f_fisheye = open(save_fisheye_name, 'wb')
+        f_fisheye.write(pan_fisheye)
+        f_fisheye.close()
+
+        save_fisheye_seg = r"E:\Master\Papers\SkyViewFactor\SCI\data\BMapQinhuai\fisheye_seg/"
+        if not os.path.exists(save_fisheye_seg):
+            os.makedirs(save_fisheye_seg)
+        save_fisheye_seg_name = save_fisheye_seg + pan_id + "_" + pan_lng + "_" + pan_lat + ".png"
+        f_fisheye_seg = open( save_fisheye_seg_name, 'wb')
+        f_fisheye_seg.write(pan_fisheye_seg)
+        f_fisheye_seg.close()
+
+        save_panorama = r"E:\Master\Papers\SkyViewFactor\SCI\data\BMapQinhuai\panorama/"
+        if not os.path.exists(save_panorama):
+            os.makedirs(save_panorama)
+        save_panorama_name = save_panorama + pan_id + "_" + pan_lng + "_" + pan_lat + ".png"
+        f_panorama = open(save_panorama_name, 'wb')
+        f_panorama.write(pan_picture)
+        f_panorama.close()
+    print('-----全部数据保存成功------')
+    socketio.emit("postAllPanoramaResults", {"status": 200, "msg": "All data is saved successfully!"}, broadcast=True)
+
+# -----------------------------------------------DELETE---------------------------------------------------------#
+
+# -----------------------------------------#
+# Websocket删除单个点的接口
+# -----------------------------------------#
+@socketio.on("deletePoint")
+def delete_point(get_data):
+    try:
+        table = "bmapsvf_test"
+        print('-----开始删除采样点-----')
+        with mysql() as cursor:
+            cursor.execute(
+                "Delete from {} where panoid = %s".format(table), (get_data))
+            print('-----单个采样点删除成功-----')
+            socketio.emit("getDeletePoint", {"msg": "Successfully delete!"}, broadcast=True)
+
+            cursor.execute("SELECT panoid, lng, lat, fisheye, fisheye_seg, svf FROM {}".format(table))
+            result = cursor.fetchall()
+            panorama_results = []
+            for row in result:
+                panoid = row[0]
+                lng = row[1]
+                lat = row[2]
+                fisheye_pro = base64.b64encode(row[3])
+                fisheye = fisheye_pro.decode("utf-8")
+                fisheye_seg_pro = base64.b64encode(row[4])
+                fisheye_seg = fisheye_seg_pro.decode("utf-8")
+                svf = row[5]
+                row_result = {"panoid": panoid, "lng": lng, "lat": lat, "fisheye": fisheye, "fisheye_seg": fisheye_seg,
+                              "svf": svf}
+                panorama_results.append(row_result)
+            socketio.emit("getSecondPoints", {"secondPoints": panorama_results}, broadcast=True)
+    except Exception as e:
+        print(e)
+        socketio.emit("getError", str(e))
+
+# -----------------------------------------#
+# Websocket删除csv加载点的接口
+# -----------------------------------------#
+@socketio.on("deleteCsvPoints")
+def delete_csv_point(get_data):
+    try:
+        table = "bmapsvf_csv"
+        print('-----开始删除采样点-----')
+        with mysql() as cursor:
+            cursor.execute(
+                "Delete from {} where panoid = %s".format(table), (get_data))
+            print('-----单个采样点删除成功-----')
+            socketio.emit("getDeleteCsvPoint", {"msg": "Successfully delete!"}, broadcast=True)
+
+            cursor.execute("SELECT panoid, lng, lat, fisheye, fisheye_seg, svf FROM {}".format(table))
+            result = cursor.fetchall()
+            panorama_results = []
+            for row in result:
+                panoid = row[0]
+                lng = row[1]
+                lat = row[2]
+                fisheye_pro = base64.b64encode(row[3])
+                fisheye = fisheye_pro.decode("utf-8")
+                fisheye_seg_pro = base64.b64encode(row[4])
+                fisheye_seg = fisheye_seg_pro.decode("utf-8")
+                svf = row[5]
+                row_result = {"panoid": panoid, "lng": lng, "lat": lat, "fisheye": fisheye, "fisheye_seg": fisheye_seg,
+                              "svf": svf}
+                panorama_results.append(row_result)
+            socketio.emit("getSecondCsvPoints", {"secondCsvPoints": panorama_results}, broadcast=True)
+    except Exception as e:
+        print(e)
+        socketio.emit("getCsvError", str(e))
 
 if __name__ == "__main__":
      # socketio.run(app, host='127.0.0.1', port=5000, debug=True, threaded=True, logger=True, engineio_logger=True)
