@@ -18,6 +18,7 @@ import base64
 import pymysql
 import contextlib
 import datetime
+import zipfile
 from PIL import Image
 import urllib.request
 from tqdm import tqdm
@@ -337,14 +338,14 @@ def transform_wgs_coordinate(get_data):
 # -----------------------------------------------GET-----------------------------------------------------------#
 
 # -----------------------------------------#
-# Websocket获取百度全景处理结果接口
+# Websocket获取福华路百度全景处理结果接口
 # -----------------------------------------#
 @socketio.on("getPanoramaResults")
 def read_panorama(get_data):
     resquest_info = get_data.encode('utf-8').decode('utf-8')
     print(resquest_info)
     with mysql() as cursor:
-        cursor.execute("SELECT panoid, lng, lat, fisheye, fisheye_seg, svf FROM bmapsvf_test")
+        cursor.execute("SELECT panoid, lng, lat, fisheye, fisheye_seg, svf FROM bmapsvf_fuhualu")
         result = cursor.fetchall()
 
     panorama_results = []
@@ -362,14 +363,14 @@ def read_panorama(get_data):
     socketio.emit("postPanoramaResults", {"panoramaResults": panorama_results}, broadcast=True)
 
 # -----------------------------------------#
-# Websocket获取百度全景处理结果接口
+# Websocket获取秦淮区百度全景处理结果接口
 # -----------------------------------------#
 @socketio.on("getCsvPanoramaResults")
 def read_csv_panorama(get_data):
     resquest_info = get_data.encode('utf-8').decode('utf-8')
     print(resquest_info)
     with mysql() as cursor:
-        cursor.execute("SELECT panoid, lng, lat, fisheye, fisheye_seg, svf FROM bmapsvf_qinhuai WHERE id <=228")
+        cursor.execute("SELECT panoid, lng, lat, fisheye, fisheye_seg, svf FROM bmapsvf_qinhuai WHERE id <=300")
         result = cursor.fetchall()
 
     panorama_results = []
@@ -387,7 +388,255 @@ def read_csv_panorama(get_data):
     socketio.emit("postCsvPanoramaResults", {"panoramaResults": panorama_results}, broadcast=True)
 
 # -----------------------------------------#
-# Websocket获取全部数据进行保存
+# Websocket获取秦淮区百度全景的SVF结果接口
+# -----------------------------------------#
+@socketio.on("getCsvSVFResults")
+def read_csv_svf(get_data):
+    resquest_info = get_data.encode('utf-8').decode('utf-8')
+    print(resquest_info)
+    with mysql() as cursor:
+        cursor.execute("SELECT lng, lat, svf FROM bmapsvf_qinhuai")
+        result = cursor.fetchall()
+
+    svf_results = []
+    for row in result:
+        lng = row[0]
+        lat = row[1]
+        svf = row[2]
+        row_result = {"lng": lng, "lat": lat, "svf": svf}
+        svf_results.append(row_result)
+    socketio.emit("postCsvSVFResults", {"svfResults": svf_results}, broadcast=True)
+
+# -----------------------------------------#
+# Websocket获取福华路数据进行保存
+# -----------------------------------------#
+@socketio.on("getFuhuaPanoramaResults")
+def read_fuhua_panorama(get_data):
+    print('-----%s-----' % get_data)
+    table_name = 'bmapsvf_fuhualu'
+
+    # 创建临时目录来存储要导出的文件夹和文件
+    temp_dir = 'temp'
+    os.makedirs(temp_dir, exist_ok=True)
+
+    # 创建四个文件夹来存储数据
+    folders = ['panorama', 'panorama_seg', 'fisheye', 'fisheye_seg']
+    for folder in folders:
+        folder_path = os.path.join(temp_dir, folder)
+        os.makedirs(folder_path, exist_ok=True)
+
+    # 获得svf字段名--->创建csv文件
+    with mysql() as cursor:
+        cursor.execute("DESC %s" % table_name)
+        field_names = [row[0] for row in cursor.fetchall()]
+        field_names.remove("panorama")
+        field_names.remove("panorama_seg")
+        field_names.remove("fisheye")
+        field_names.remove("fisheye_seg")
+
+    with mysql() as cursor:
+        cursor.execute("SELECT id, panoid, date, lng, lat, description, svf FROM %s" % table_name)
+        result = cursor.fetchall()
+
+    file_name = "%s.csv" % table_name
+    file_path = os.path.join(temp_dir, file_name)
+
+    with open(file_path, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(field_names)
+        for row in result:
+            writer.writerow(row)
+
+    # 获取图像数据
+    with mysql() as cursor:
+        cursor.execute("SELECT id, lng, lat, fisheye, fisheye_seg, panorama, panorama_seg FROM %s" % table_name)
+        result = cursor.fetchall()
+
+    panorama_results = []
+    for row in result:
+        pan_id = str(row[0])
+        pan_lng = str(row[1])
+        pan_lat = str(row[2])
+        pan_fisheye = row[3]
+        pan_fisheye_seg = row[4]
+        pan_picture = row[5]
+        pan_picture_seg = row[6]
+
+        folder_panorama_name = folders[0]
+        folder_panorama_path = os.path.join(temp_dir, folder_panorama_name)
+        save_panorama_name = pan_id + "_" + pan_lng + "_" + pan_lat + "_" + "panorama" + ".png"
+        file_panorama_path = os.path.join(folder_panorama_path, save_panorama_name)
+        f_panorama = open(file_panorama_path, 'wb')
+        f_panorama.write(pan_picture)
+        f_panorama.close()
+
+        folder_panorama_seg_name = folders[1]
+        folder_panorama_seg_path = os.path.join(temp_dir, folder_panorama_seg_name)
+        save_panorama_seg_name = pan_id + "_" + pan_lng + "_" + pan_lat + "_" + "panorama_seg" + ".png"
+        file_panorama_seg_path = os.path.join(folder_panorama_seg_path, save_panorama_seg_name)
+        f_panorama_seg = open(file_panorama_seg_path, 'wb')
+        f_panorama_seg.write(pan_picture_seg)
+        f_panorama_seg.close()
+
+        folder_fisheye_name = folders[2]
+        folder_fisheye_path = os.path.join(temp_dir, folder_fisheye_name)
+        save_fisheye_name = pan_id + "_" + pan_lng + "_" + pan_lat + "_" + "fisheye" + ".png"
+        file_fisheye_path = os.path.join(folder_fisheye_path, save_fisheye_name)
+        f_fisheye = open(file_fisheye_path, 'wb')
+        f_fisheye.write(pan_fisheye)
+        f_fisheye.close()
+
+        folder_fisheye_seg_name = folders[3]
+        folder_fisheye_seg_path = os.path.join(temp_dir, folder_fisheye_seg_name)
+        save_fisheye_seg_name = pan_id + "_" + pan_lng + "_" + pan_lat + "_" + "fisheye_seg" + ".png"
+        file_fisheye_seg_path = os.path.join(folder_fisheye_seg_path, save_fisheye_seg_name)
+        f_fisheye_seg = open(file_fisheye_seg_path, 'wb')
+        f_fisheye_seg.write(pan_fisheye_seg)
+        f_fisheye_seg.close()
+
+    zip_file_path = BytesIO()
+    with zipfile.ZipFile(zip_file_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        # 将临时目录中的文件夹和文件添加到zip压缩包中
+        for  root, dirs, files in os.walk(temp_dir):
+            for file in files:
+                file_path = os.path.join(root, file)
+                zipf.write(file_path, os.path.relpath(file_path, temp_dir))
+    # 删除临时目录
+    # for root, dirs, files in os.walk(temp_dir, topdown=False):
+    #     for file in files:
+    #         file_path = os.path.join(root, file)
+    #         os.remove(file_path)
+    #     for dir_name in dirs:
+    #         dir_path = os.path.join(root, dir_name)
+    #         os.rmdir(dir_path)
+    #     os.rmdir(root)
+    print('-----全部数据保存成功------')
+    socketio.emit("postFuhuaPanoramaResults", {"status": 200, "name": table_name, "data": zip_file_path.getvalue()}, broadcast=True)
+    # 删除临时目录
+    for root, dirs, files in os.walk(temp_dir, topdown=False):
+        for file in files:
+            file_path = os.path.join(root, file)
+            os.remove(file_path)
+        for dir_name in dirs:
+            dir_path = os.path.join(root, dir_name)
+            os.rmdir(dir_path)
+
+# -----------------------------------------#
+# Websocket获取秦淮区数据进行保存
+# -----------------------------------------#
+@socketio.on("getQinhuaiPanoramaResults")
+def read_fuhua_panorama(get_data):
+    print('-----%s-----' % get_data)
+    table_name = 'bmapsvf_qinhuai'
+
+    # 创建临时目录来存储要导出的文件夹和文件
+    temp_dir = 'temp'
+    os.makedirs(temp_dir, exist_ok=True)
+
+    # 创建四个文件夹来存储数据
+    folders = ['panorama', 'panorama_seg', 'fisheye', 'fisheye_seg']
+    for folder in folders:
+        folder_path = os.path.join(temp_dir, folder)
+        os.makedirs(folder_path, exist_ok=True)
+
+    # 获得svf字段名--->创建csv文件
+    with mysql() as cursor:
+        cursor.execute("DESC %s" % table_name)
+        field_names = [row[0] for row in cursor.fetchall()]
+        field_names.remove("panorama")
+        field_names.remove("panorama_seg")
+        field_names.remove("fisheye")
+        field_names.remove("fisheye_seg")
+
+    with mysql() as cursor:
+        cursor.execute("SELECT id, panoid, date, lng, lat, description, svf FROM %s" % table_name)
+        result = cursor.fetchall()
+
+    file_name = "%s.csv" % table_name
+    file_path = os.path.join(temp_dir, file_name)
+
+    with open(file_path, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(field_names)
+        for row in result:
+            writer.writerow(row)
+
+    # 获取图像数据
+    with mysql() as cursor:
+        cursor.execute("SELECT id, lng, lat, fisheye, fisheye_seg, panorama, panorama_seg FROM %s" % table_name)
+        result = cursor.fetchall()
+
+    panorama_results = []
+    for row in result:
+        pan_id = str(row[0])
+        pan_lng = str(row[1])
+        pan_lat = str(row[2])
+        pan_fisheye = row[3]
+        pan_fisheye_seg = row[4]
+        pan_picture = row[5]
+        pan_picture_seg = row[6]
+
+        folder_panorama_name = folders[0]
+        folder_panorama_path = os.path.join(temp_dir, folder_panorama_name)
+        save_panorama_name = pan_id + "_" + pan_lng + "_" + pan_lat + "_" + "panorama" + ".png"
+        file_panorama_path = os.path.join(folder_panorama_path, save_panorama_name)
+        f_panorama = open(file_panorama_path, 'wb')
+        f_panorama.write(pan_picture)
+        f_panorama.close()
+
+        folder_panorama_seg_name = folders[1]
+        folder_panorama_seg_path = os.path.join(temp_dir, folder_panorama_seg_name)
+        save_panorama_seg_name = pan_id + "_" + pan_lng + "_" + pan_lat + "_" + "panorama_seg" + ".png"
+        file_panorama_seg_path = os.path.join(folder_panorama_seg_path, save_panorama_seg_name)
+        f_panorama_seg = open(file_panorama_seg_path, 'wb')
+        f_panorama_seg.write(pan_picture_seg)
+        f_panorama_seg.close()
+
+        folder_fisheye_name = folders[2]
+        folder_fisheye_path = os.path.join(temp_dir, folder_fisheye_name)
+        save_fisheye_name = pan_id + "_" + pan_lng + "_" + pan_lat + "_" + "fisheye" + ".png"
+        file_fisheye_path = os.path.join(folder_fisheye_path, save_fisheye_name)
+        f_fisheye = open(file_fisheye_path, 'wb')
+        f_fisheye.write(pan_fisheye)
+        f_fisheye.close()
+
+        folder_fisheye_seg_name = folders[3]
+        folder_fisheye_seg_path = os.path.join(temp_dir, folder_fisheye_seg_name)
+        save_fisheye_seg_name = pan_id + "_" + pan_lng + "_" + pan_lat + "_" + "fisheye_seg" + ".png"
+        file_fisheye_seg_path = os.path.join(folder_fisheye_seg_path, save_fisheye_seg_name)
+        f_fisheye_seg = open(file_fisheye_seg_path, 'wb')
+        f_fisheye_seg.write(pan_fisheye_seg)
+        f_fisheye_seg.close()
+
+    zip_file_path = BytesIO()
+    with zipfile.ZipFile(zip_file_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        # 将临时目录中的文件夹和文件添加到zip压缩包中
+        for  root, dirs, files in os.walk(temp_dir):
+            for file in files:
+                file_path = os.path.join(root, file)
+                zipf.write(file_path, os.path.relpath(file_path, temp_dir))
+    # 删除临时目录
+    # for root, dirs, files in os.walk(temp_dir, topdown=False):
+    #     for file in files:
+    #         file_path = os.path.join(root, file)
+    #         os.remove(file_path)
+    #     for dir_name in dirs:
+    #         dir_path = os.path.join(root, dir_name)
+    #         os.rmdir(dir_path)
+    #     os.rmdir(root)
+    print('-----全部数据保存成功------')
+    socketio.emit("postQinhuaiPanoramaResults", {"status": 200, "name": table_name, "data": zip_file_path.getvalue()}, broadcast=True)
+    # 删除临时目录
+    for root, dirs, files in os.walk(temp_dir, topdown=False):
+        for file in files:
+            file_path = os.path.join(root, file)
+            os.remove(file_path)
+        for dir_name in dirs:
+            dir_path = os.path.join(root, dir_name)
+            os.rmdir(dir_path)
+
+# -----------------------------------------#
+# Websocket获取秦淮区数据进行保存
 # -----------------------------------------#
 @socketio.on("getAllPanoramaResults")
 def read_all_panorama(get_data):
