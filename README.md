@@ -2,12 +2,12 @@
 
 # Feature
 
-- The image semantic segmentation algorithm **DeeplabV3** is constructed。
-- The best **projection algorithm** for converting panoramic image into fisheye image is written。
-- Write the most **RESTful** Web API。
-- The TCP based full-duplex communication protocol **WebSocket** is used。
-- Python's **Flask** framework is used。
-- Using **MySQL** database, the design of the data table can refer to the example [folder](./temp)
+- The image semantic segmentation algorithm **DeeplabV3** is constructed.
+- The best **projection algorithm** for converting panoramic image into fisheye image is written.
+- Write the most **RESTful** Web API.
+- The TCP based full-duplex communication protocol **WebSocket** is used.
+- Python's **Flask** framework is used.
+- Using **MySQL** database, the design of the data table can refer to the example [folder](./temp).
 
 # Directory organization specification
 
