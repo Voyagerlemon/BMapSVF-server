@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 @Project: Flask_panorama
-@Author: xuhy 1727317079@qq.com
+@Author: xuhy xuhaiyangw@163.com
 @Date: 2023/3/12 16:10
-@LastEditors: xuhy 1727317079@qq.com
+@LastEditors: xuhy xuhaiyangw@163.com
 @FilePath: equire2fisheye512.py
 @Description: 1024*512--->512*512
 """
@@ -29,10 +29,8 @@ def equire2fisheye(panorama, isSegFisheye):
     x = np.tile(x, (512, 1))
     y = x.transpose()
     dist2ori = np.sqrt((y * y) + (x * x))
-
     angle = dist2ori * 90.0
     angle[np.where(angle <= 0.000000001)] = 0.000000001
-    # 加入svf计算的权重
     radian = angle * 3.1415926 / 180.0
     fisheye_weight = np.sin(radian) / (angle / 90.0)
 
@@ -61,7 +59,6 @@ def equire2fisheye(panorama, isSegFisheye):
     blue[outside] = 0
 
     svf = -1
-    # RGB(180,130,70)
     sky_mask = 65536 * 180 + 256 * 130 + 70
     if isSegFisheye == 1:
         all_pixels = 65536 * red + 256 * green + blue

@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-@Author: xuhy
+@Author: xuhy xuhaiyangw@163.com
 @Date: 2022/8/11 18:03
 @LastEditTime: 2022/8/11 18:03
-@LastEditors: xuhy
+@LastEditors: xuhy xuhaiyangw@163.com
 @FilePath: calculate_fisheye.py
-@Description: 通过计算鱼眼图像的天空颜色的像素，得出天空可视域
+@Description: By calculating the pixels of the sky color of the fisheye image, the visual field of the sky is obtained
 """
 import os
 import prettytable
@@ -13,9 +13,6 @@ from PIL import Image
 from collections import Counter
 
 
-# -----------------------------------------#
-# 计算一张图像
-# -----------------------------------------#
 def calculate_single_fisheye():
     file_path = 'img_fisheye'
     f = open(file_path[:-7] + 'result.txt', 'w')

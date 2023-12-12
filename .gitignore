@@ -3,5 +3,5 @@ __pycache__/
 .idea/
 .workflow/
 
-autocalculate_all_fisheye.py
+auto_calculate_all_fisheye.py
 calculate_fisheye.py

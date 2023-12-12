@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-@Author: xuhy
+@Author: xuhy xuhaiyangw@163.com
 @Date: 2022/8/1 20:29
 @LastEditTime: 2022/8/1 20:29
-@LastEditors: xuhy
+@LastEditors: xuhy xuhaiyangw@163.com
 @FilePath: panorama_fisheye.py
-@Description: 将全景图转换为鱼眼图像
+@Description: Convert the panorama to a fisheye image
 """
 import cv2
 import math
@@ -17,7 +17,7 @@ def panorama_fisheye(img_name):
     rows, cols, rgb = img.shape
     cx = cols / (2 * math.pi)
     cy = cols / (2 * math.pi)
-    r0 = int(cols / (2 * math.pi))  # 鱼眼图像的半径
+    r0 = int(cols / (2 * math.pi))  # The radius of the fisheye image
     img_fisheye = np.zeros([250, 250, 4], np.uint8)
     for xf in range(250):
         for yf in range(250):

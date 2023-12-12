@@ -1,20 +1,20 @@
 # -*- coding: utf-8 -*-
 """
-@Author: xuhy
+@Author: xuhy xuhaiyangw@163.com
 @Date: 2022/8/18 19:42
 @LastEditTime: 2022/8/18 19:42
-@LastEditors: xuhy
+@LastEditors: xuhy xuhaiyangw@163.com
 @FilePath: generate_token.py
-@Description: 生成登录的token并进行验证
+@Description: Generate a login token and authenticate it
 """
 import time
 import base64
 import hmac
 
 
-# -----------------------------------------#
-# 生成token
-# -----------------------------------------#
+# ---------#
+# token
+# ---------#
 def generate_token(key, expire=3600):
     ts_str = str(time.time() + expire)
     ts_byte = ts_str.encode("utf-8")
@@ -24,9 +24,6 @@ def generate_token(key, expire=3600):
     return b64_token.decode("utf-8")
 
 
-# -----------------------------------------#
-# 验证token
-# -----------------------------------------#
 def certify_token(key, token):
     token_str = base64.urlsafe_b64decode(token).decode('utf-8')
     token_list = token_str.split(':')

@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-@Author: xuhy
+@Author: xuhy xuhaiyangw@163.com
 @Date: 2022/8/3 16:14
 @LastEditTime: 2022/8/3 16:14
-@LastEditors: xuhy
+@LastEditors: xuhy xuhaiyangw@163.com
 @FilePath: read_panorama.py
-@Description: 实时验证并分割全景静态图
+@Description: Verify and segment panoramic static images in real time
 """
 import cv2
 import time
@@ -16,11 +16,11 @@ from datasets import DatasetSeq
 from torch.autograd import Variable
 from model.deeplabv3 import DeepLabV3
 from utils.utils import label_img_to_color
-from equire2fisheye512 import equire2fisheye
 
-#######################################################################################
-# 转换base64格式
-#######################################################################################
+
+# ------------------------------#
+# Convert the base64 format
+# ------------------------------#
 def seg_result_img(seg_path):
     with open(seg_path, "rb") as f:
         img_stream = f.read()
@@ -34,10 +34,9 @@ def seg_result_cv(seg_path):
     return img_stream
 
 
-# -----------------------------------------#
-# 验证并分割全景静态图
-# read_panorama接口
-# -----------------------------------------#
+# -------------------------------------------------------------------------#
+# Validate and segment panoramic static diagrams ---> read_panorama API
+# -------------------------------------------------------------------------#
 def real_time_segmentation(root_directory):
     time_start = time.time()
     batch_size = 2
@@ -68,7 +67,7 @@ def real_time_segmentation(root_directory):
                     cv2.imwrite(seg_path, pred_label_img_color)
                     fisheye_result = cv2.imread(seg_path)
                     cv2.imwrite(seg_fisheye_path, fisheye_result)
-                    # equire2fisheye(seg_fisheye_path, 0)  # 转换为鱼眼
+                    # equire2fisheye(seg_fisheye_path, 0)
                     unsorted_img_ids.append(img_id)
 
     time_end = time.time()
