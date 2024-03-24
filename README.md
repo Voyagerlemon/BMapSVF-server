@@ -62,6 +62,8 @@ pip install -r requirements.txt
 ### 3、 Run
 
 ```shell
+# Add the key to the Baidu API in the app.py file
+aks = ["xxxxxxxxxxxxxxxxxxxx", "xxxxxxxxxxxxxxxxxx", ...]
 python app.py
 or
 flask run

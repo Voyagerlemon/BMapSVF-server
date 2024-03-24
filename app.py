@@ -202,10 +202,8 @@ def upload():
         # Service address
         host = "https://api.map.baidu.com"
         uri = "/geoconv/v1/"
-        aks = ["BrlC46ogjvmEkblNNsauxtjmgKjHBiqN", "uYPVx8FpGoILUNAkM9WGCvFb1t5tQAuH", "h5GlIkW5aT6ZVyESoOtaz5C8KCPpcCLE",
-              "YniOI8mkAeMNRPNR4DkFu5LQP9ArmWGn", "YeOWIMkFXGT8k6LIYi6l5eGYEYpnS9gr", "qvIqQKAADKsPFqmxR6T0xP6EtKFT6TjQ",
-              "5NLRP7yso7RyZWiSkERyl8ZmPVrOEDRH", "2rP0A4BSKwhFnWnQAvswGIUISoIHRtTU"]
-        ak = "BrlC46ogjvmEkblNNsauxtjmgKjHBiqN"
+        #
+        aks = []
         with open(cur_path + f"/csv/file_{time_stamp}.csv", encoding='utf-8', newline='') as csvfile:
             reader = csv.DictReader(csvfile)
             total = 0
@@ -365,7 +363,8 @@ def read_csv_panorama(get_data):
     resquest_info = get_data.encode('utf-8').decode('utf-8')
     print(resquest_info)
     with mysql() as cursor:
-        cursor.execute("SELECT panoid, lng, lat, fisheye, fisheye_seg, svf FROM bmapsvf_qinhuai WHERE id <=300")
+        # cursor.execute("SELECT panoid, lng, lat, fisheye, fisheye_seg, svf FROM bmapsvf_qinhuai WHERE id <=300")
+        cursor.execute("SELECT panoid, lng, lat, svf FROM bmapsvf_qinhuai")
         result = cursor.fetchall()
 
     panorama_results = []
@@ -378,7 +377,8 @@ def read_csv_panorama(get_data):
         fisheye_seg_pro = base64.b64encode(row[4])
         fisheye_seg = fisheye_seg_pro.decode("utf-8")
         svf = row[5]
-        row_result = {"panoid": panoid, "lng": lng, "lat": lat, "fisheye": fisheye, "fisheye_seg": fisheye_seg, "svf": svf}
+        # row_result = {"panoid": panoid, "lng": lng, "lat": lat, "fisheye": fisheye, "fisheye_seg": fisheye_seg, "svf": svf}
+        row_result = {"panoid": panoid, "lng": lng, "lat": lat, "svf": svf}
         panorama_results.append(row_result)
     socketio.emit("postCsvPanoramaResults", {"panoramaResults": panorama_results}, broadcast=True)
 
