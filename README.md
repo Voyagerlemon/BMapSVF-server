@@ -59,7 +59,34 @@ cd BMapSVF-server
 pip install -r requirements.txt
 ```
 
-### 3、 Run
+### 3、 Create database
+
+In the utils folder, find the create_database.py file and then run it; however, your computer must have MySQL 5.x/8.x version installed in advance.
+
+```shell
+# utils/create_database.py
+# Connection details should be customized as per your MySQL server
+connection = pymysql.connect(host='your_host',
+                             user='your_user',
+                             password='your_password',
+                             charset='utf8mb4',
+                             cursorclass=pymysql.cursors.DictCursor)
+# app.py
+def mysql(host='your_host', user='your_user', password='your_password', port=your_port, db='panorama'):
+    conn = pymysql.connect(host=host, port=port, user=user,
+                           password=password, db=db)
+    cursor = conn.cursor()
+    try:
+        yield cursor
+    finally:
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+python utils/create_database.py
+```
+
+### 4、 Run
 
 ```shell
 # Add the key to the Baidu API in the app.py file
@@ -69,7 +96,7 @@ or
 flask run
 ```
 
-> **<span style="color: red">Note:</span>** **Before you can start running the project, you need to create a MySQL database, named panorama, or you can modify the code depending on your situation**
+> **<span style="color: red">Note:</span>** **Before you can start running the project, you need to create a MySQL database, or you can modify the code depending on your situation**
 
 ```python
 # app.py 116-126
